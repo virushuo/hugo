@@ -77,6 +77,41 @@ List requires a subcommand, e.g. ` + "`hugo list drafts`.",
 			},
 		},
 		&cobra.Command{
+			Use:   "publish",
+			Short: "List all published posts",
+			Long:  `List all of the published posts in your content directory.`,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				cfgInit := func(c *commandeer) error {
+					c.Set("buildDrafts", true)
+					return nil
+				}
+				c, err := initializeConfig(true, false, &cc.hugoBuilderCommon, cc, cfgInit)
+				if err != nil {
+					return err
+				}
+
+				sites, err := hugolib.NewHugoSites(*c.DepsCfg)
+
+				if err != nil {
+					return newSystemError("Error creating sites", err)
+				}
+
+				if err := sites.Build(hugolib.BuildCfg{SkipRender: true}); err != nil {
+					return newSystemError("Error Processing Source Content", err)
+				}
+
+				for _, p := range sites.Pages() {
+					if !p.IsDraft() && p.File.LogicalName() != "" {
+						jww.FEEDBACK.Println(filepath.Join(p.File.Dir(), p.File.LogicalName()))
+					}
+
+				}
+
+				return nil
+
+			},
+		},
+		&cobra.Command{
 			Use:   "future",
 			Short: "List all posts dated in the future",
 			Long: `List all of the posts in your content directory which will be

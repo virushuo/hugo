@@ -288,6 +288,28 @@ func (c *commandeer) fullBuild() error {
 			}()
 		}
 	}
+	copyPostsFunc := func() error {
+		if c.Cfg.GetString("publishContentDir") == "" {
+			return nil
+		}
+		publishContentDir := c.hugo.PathSpec.AbsPathify(c.Cfg.GetString("publishContentDir"))
+    contentDir := c.hugo.PathSpec.AbsPathify(c.Cfg.GetString("contentDir"))
+		for _, p := range c.hugo.Pages() {
+			if !p.IsDraft() && p.File.LogicalName() != "" {
+				srcfilename := filepath.Join(contentDir, p.File.Dir(), p.File.LogicalName())
+				destfilename := filepath.Join(publishContentDir, p.File.Dir(), p.File.LogicalName())
+				destPath := filepath.Join(publishContentDir, p.File.Dir())
+				if _, err := os.Stat(destPath); os.IsNotExist(err) {
+				    os.Mkdir(destPath, 0755)
+				}
+			  err := fsync.Sync(destfilename, srcfilename)
+				if err != nil {
+					return errors.Wrap(err, "Error copying posts")
+				}
+			}
+		}
+		return nil
+  }
 
 	copyStaticFunc := func() error {
 		cnt, err := c.copyStatic()
@@ -317,10 +339,16 @@ func (c *commandeer) fullBuild() error {
 		if err := buildSitesFunc(); err != nil {
 			return err
 		}
+		if err := copyPostsFunc(); err != nil {
+			return err
+		}
 	} else {
 		g.Go(copyStaticFunc)
 		g.Go(buildSitesFunc)
 		if err := g.Wait(); err != nil {
+			return err
+		}
+		if err := copyPostsFunc(); err != nil {
 			return err
 		}
 	}
@@ -455,6 +483,7 @@ func (c *commandeer) copyStaticTo(sourceFs *filesystems.SourceFilesystem) (uint6
 	}
 
 	fs := &countingStatFs{Fs: sourceFs.Fs}
+
 
 	syncer := fsync.NewSyncer()
 	syncer.NoTimes = c.Cfg.GetBool("noTimes")
